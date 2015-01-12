@@ -95,6 +95,9 @@ func signatureFromConfig(repo *git.Repository) *git.Signature {
 		When:  time.Now(),
 	}
 }
+func MoveMRefsDown(repo *git.Repository) {
+}
+
 func saveTargetRefs(ours *git.Oid, theirs *git.Oid, repo *git.Repository) {
 	sig := signatureFromConfig(repo)
 	fmt.Println(sig.Email)
@@ -109,13 +112,26 @@ func saveTargetRefs(ours *git.Oid, theirs *git.Oid, repo *git.Repository) {
 
 	_, err = repo.CreateReference("refs/goimerge/ca", commonAncestor, false, sig, "Create refs/goimerge/theirs.")
 
-	commit, err := repo.LookupCommit(ours)
 	checkErr(err)
 
-	commits := []*git.Commit{commit}
+	commits := []*git.Commit{}
 
 	walk, err := repo.Walk()
 	walk.PushRange(commonAncestor.String() + ".." + ours.String())
+
+	walk.Sorting(git.SortReverse)
+	walk.Iterate(func(c *git.Commit) bool {
+		commits = append(commits, c)
+		return true
+	})
+
+	for idx, c := range commits {
+		fmt.Println(idx, ":", c.Message())
+
+		ref := fmt.Sprintf("refs/goimerge/m-%v", idx)
+		_, err = repo.CreateReference(ref, c.Id(), false, sig, "Created "+ref)
+
+	}
 
 }
 func checkMergeForErrors(ours *git.Commit, theirs *git.Commit, repo *git.Repository) error {

@@ -177,11 +177,13 @@ func TestMRefs(t *testing.T) {
 	ok(t, err)
 
 	numOfCommits := 7
-	for i := numOfCommits; i >= 0; i-- {
-		key := fmt.Sprintf("m-%v", i)
+	for i := numOfCommits - 1; i >= 0; i-- {
+		key := fmt.Sprintf("refs/goimerge/m-%v", i)
 		ref := refs[key]
 		assert(t, ref != nil, "%v ref doesn't exist.", key)
 		equals(t, refs[key].Target().String(), commit.Id().String())
+		// because there is no merges we can just go back to the parent
+		commit = commit.Parent(0)
 	}
 }
 
