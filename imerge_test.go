@@ -114,12 +114,9 @@ func TestInvalidMergesReturnErrors(t *testing.T) {
 	err = Begin("master", repo)
 	assert(t, err != nil, "can't merge the same id")
 
-	removeRefs(repo)
-
 	err = Begin("branch-1", repo)
 	assert(t, err != nil, "fast forwards should have an error")
 }
-*/
 
 func TestRefsAreWritten(t *testing.T) {
 	repo, cleanup := createTestRepo(t)
@@ -136,6 +133,99 @@ func TestRefsAreWritten(t *testing.T) {
 
 	err = Begin("branch-1", repo)
 	assert(t, len(imergeRefs(repo)) != 0, "imerge refs should exist")
+}
+
+func TestCantBeginAgainUntilAborted(t *testing.T) {
+	repo, cleanup := createTestRepo(t)
+	defer cleanup()
+	// Create initial commit on master
+	seedRepo(t, repo)
+
+	// Add a commit on branch-1
+	headCommit, err := getHeadCommit(repo)
+	branch, err := repo.CreateBranch("branch-1", headCommit, false, signature, "Created a branch message")
+	ok(t, err)
+	updateFileParentCommit(t, repo, headCommit, "README", "foo1", "Foo1 commit", branch.Reference.Name())
+	updateFileParentCommit(t, repo, headCommit, "README", "foo2", "Foo2 commit", "HEAD")
+
+	err = Begin("branch-1", repo)
+	ok(t, err)
+
+	err = Begin("branch-1", repo)
+	assert(t, err != nil, "Can't start again until finished")
+
+	err = Abort(repo)
+	ok(t, err)
+
+	err = Begin("branch-1", repo)
+	ok(t, err)
+
+}
+*/
+func TestMRefs(t *testing.T) {
+	repo, cleanup := createTestRepo(t)
+	defer cleanup()
+
+	setupConflictRepo1(t, repo)
+
+	err := Begin("branch-1", repo)
+	ok(t, err)
+
+	refs := imergeRefs(repo)
+
+	commit, err := getHeadCommit(repo)
+	ok(t, err)
+
+	numOfCommits := 7
+	for i := numOfCommits; i >= 0; i-- {
+		key := fmt.Sprintf("m-%v", i)
+		ref := refs[key]
+		assert(t, ref != nil, "%v ref doesn't exist.", key)
+		equals(t, refs[key].Target().String(), commit.Id().String())
+	}
+}
+
+func setupConflictRepo1(t *testing.T, repo *git.Repository) {
+	// Create initial commit on master
+	seedRepo(t, repo)
+
+	// Create branch-1 (theirs)
+	headCommit, err := getHeadCommit(repo)
+	ok(t, err)
+
+	_, err = repo.CreateBranch("branch-1", headCommit, false, signature, "Created a branch message")
+	ok(t, err)
+
+	// Setup theirs
+	// T1 [conflict file 3]
+	updateFileOnBranch(t, repo, "branch-1", "file3", "bar1", "I want bar1")
+	// T2
+	updateFileOnBranch(t, repo, "branch-1", "tfile", "bar", "I want bars")
+	// T3 [conflict file 2]
+	updateFileOnBranch(t, repo, "branch-1", "file2", "bar2", "I want bar2")
+	// T4 [conflict file 1]
+	updateFileOnBranch(t, repo, "branch-1", "file1", "bar4", "I want bar4")
+	// T5
+	updateFileOnBranch(t, repo, "branch-1", "tfile", "barss", "I want barss")
+	// T6
+	updateFileOnBranch(t, repo, "branch-1", "tfile", "barsss", "I want barsss")
+
+	// Setup ours
+	// O1
+	updateFileOnBranch(t, repo, "master", "ofile", "foos", "I want foos")
+	// O2 [conflict file 1]
+	updateFileOnBranch(t, repo, "master", "file1", "foo1", "I want foo1")
+	// O3
+	updateFileOnBranch(t, repo, "master", "ofile", "fooss", "I want fooss")
+	// O4
+	updateFileOnBranch(t, repo, "master", "ofile", "foosss", "I want foosss")
+	// O5
+	updateFileOnBranch(t, repo, "master", "ofile", "foossss", "I want foossss")
+	// 06 [conflict file 2]
+	updateFileOnBranch(t, repo, "master", "file2", "foo2", "I want foo2")
+	// 07 [conflict file 3]
+	updateFileOnBranch(t, repo, "master", "file3", "foo3", "I want foo3")
+
 }
 
 func getHeadCommit(repo *git.Repository) (*git.Commit, error) {

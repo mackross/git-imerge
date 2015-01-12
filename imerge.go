@@ -27,9 +27,11 @@ func Begin(spec string, repo *git.Repository) error {
 	if err != nil {
 		return err
 	}
+	if anyImergeRefExists(repo) {
+		return errors.New("Cannot begin a new merge while there is one in progress.")
+	}
 	saveTargetRefs(ours.Id(), theirs.Id(), repo)
 	return nil
-
 }
 
 func imergeRefs(repo *git.Repository) map[string]*git.Reference {
@@ -46,6 +48,27 @@ func imergeRefs(repo *git.Repository) map[string]*git.Reference {
 		refs[ref.Name()] = ref
 	}
 	return refs
+}
+
+func Abort(repo *git.Repository) (err error) {
+	refs := imergeRefs(repo)
+	for _, v := range refs {
+		delErr := v.Delete()
+		if delErr != nil {
+			err = delErr
+		}
+	}
+	if anyImergeRefExists(repo) {
+		return err
+	}
+	return nil
+}
+
+func insertMergeRefs(repo *git.Repository) error {
+	return nil
+}
+func anyImergeRefExists(repo *git.Repository) bool {
+	return len(imergeRefs(repo)) > 0
 }
 
 func removeRefs(repo *git.Repository) {
@@ -80,6 +103,20 @@ func saveTargetRefs(ours *git.Oid, theirs *git.Oid, repo *git.Repository) {
 	checkErr(err)
 	_, err = repo.CreateReference("refs/goimerge/theirs", theirs, false, sig, "Create refs/goimerge/theirs.")
 	checkErr(err)
+
+	commonAncestor, err := repo.MergeBase(ours, theirs)
+	checkErr(err)
+
+	_, err = repo.CreateReference("refs/goimerge/ca", commonAncestor, false, sig, "Create refs/goimerge/theirs.")
+
+	commit, err := repo.LookupCommit(ours)
+	checkErr(err)
+
+	commits := []*git.Commit{commit}
+
+	walk, err := repo.Walk()
+	walk.PushRange(commonAncestor.String() + ".." + ours.String())
+
 }
 func checkMergeForErrors(ours *git.Commit, theirs *git.Commit, repo *git.Repository) error {
 	// check ours is equal to the HEAD commit
